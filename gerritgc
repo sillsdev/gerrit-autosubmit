@@ -1,0 +1,10 @@
+#!/bin/bash
+# Run git gc --auto on all of Gerrit's git repos
+
+cd $HOME/review_site/git
+for repo in $(find -type d -name \*.git); do
+        cd $repo
+        git gc --auto
+        cd ..
+done
+
