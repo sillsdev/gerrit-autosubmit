@@ -1,0 +1,132 @@
+#!/bin/bash -e
+# Automatically submits a change in Gerrit if change has a reviewer 'autosubmit'.
+# If necessary the change gets rebased automatically.
+# This script gets called by the comment-added hook with the following parameters:
+# # comment-added --change <change id> --change-url <change url> --project <project name>
+#     --branch <branch> --topic <topic> --author <comment author> --commit <commit> --comment <comment>
+#     [--<approval category id> <score> --<approval category id> <score> ...]
+AUTOSUBMIT=autosubmit
+GERRIT=localhost
+GERRITPORT=59418
+WORKDIR=$GERRIT_SITE/tmp/autosubmit
+
+executeGerritCommand()
+{
+	ssh -l "Gerrit Code Review" -p $GERRITPORT localhost -i $GERRIT_SITE/etc/ssh_host_dsa_key \
+		suexec --as $AUTOSUBMIT -- "$@"
+}
+
+log()
+{
+	echo
+	echo "$(basename $0): $@"
+}
+
+debug()
+{
+	[ $DEBUG ] && echo "$(basename $0): $@"
+	return 0
+}
+
+getChangeState()
+{
+	executeGerritCommand gerrit query --format JSON $CHANGE_ID | ./getstate.py
+}
+
+getLatestPatchSet()
+{
+	executeGerritCommand gerrit query --format JSON $CHANGE_ID | grep -o refs/changes/[0-9/]*
+}
+
+PARAMETERS=$(getopt -o h --long debug --long change: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: -n '$(basename $0)' -- "$@")
+
+eval set -- "$PARAMETERS"
+
+while true ; do
+        case "$1" in
+                --change) CHANGE_ID=$2 ;;
+                --change-url) CHANGE_URL=$2 ;;
+                --project) PROJECT=$2 ;;
+                --branch) BRANCH=$2 ;;
+                --topic) TOPIC=$2 ;;
+                --author) AUTHOR=$2 ;;
+                --commit) COMMIT=$2 ;;
+                --comment) MSG=$2 ;;
+                --debug) DEBUG=1; shift; continue ;;
+                --) shift; break;;
+                *) log "Internal error! Unknown parameter $1"; exit 1 ;;
+        esac
+        shift 2
+done
+
+CHANGENO=${CHANGE_URL#https://gerrit.lsdev.sil.org/#/c/}
+CHANGENO=${CHANGENO%/}
+
+# Check if current change has 'autosubmit' as reviewer
+debug "Check for autosubmit as reviewer"
+GREPARG=\"number\":\"$CHANGENO\"
+if ! executeGerritCommand gerrit query --format JSON reviewer:$AUTOSUBMIT | grep -q $GREPARG; then
+	log "Autosubmit user not assigned. Exiting."
+	exit 0
+fi
+
+# Check that change isn't merged yet
+debug "Check merge state"
+CHANGESTATE=$(getChangeState)
+if [ "$CHANGESTATE" != "NEW" ]; then
+	log "Change $CHANGE_ID is not open. Exiting."
+	exit 0
+fi
+
+# Check if change is ready to be submitted
+debug "Check if ready to submit"
+SUBMITSTATE=$(executeGerritCommand gerrit test-submit-rule --format json_compact $CHANGE_ID | ./getstate.py)
+
+if [ "$SUBMITSTATE" != "OK" ]; then
+	log "Change $CHANGE_ID not ready for submit. Exiting."
+	exit 0
+fi
+
+# Try to submit
+debug "Try to submit"
+executeGerritCommand gerrit review --submit $COMMIT
+
+if [ "$(getChangeState)" = "MERGED" ]; then
+	log "Change $CHANGE_ID merged successfully."
+	exit 0
+fi
+
+# Submit failed. Try to rebase.
+debug "Submit failed. Trying to rebase"
+[ ! -d "$WORKDIR" ] && mkdir -p "$WORKDIR"
+
+cd "$WORKDIR"
+if [ ! -d "$WORKDIR/$PROJECT" ]; then
+	debug "Cloning project $PROJECT"
+	git clone git://$GERRIT/$PROJECT
+	cd $PROJECT
+	git remote set-url --push origin "ssh://$AUTOSUBMIT@$GERRIT:$GERRITPORT/$PROJECT.git"
+fi
+cd "$WORKDIR/$PROJECT"
+
+debug "Checkout change"
+git fetch git://$GERRIT/$PROJECT $(getLatestPatchSet) && git checkout FETCH_HEAD
+
+# need a queue for this check, otherwise we forget to process this change!
+#debug "Check parent commit is merged"
+#if [ $(git log --pretty=format:%H origin/$BRANCH..HEAD | wc -w) -gt 1 ]; then
+#	log "Merge parent commit first. Exiting."
+#	exit 0
+#fi
+
+debug "Rebase on origin/$BRANCH"
+if ! git rebase origin/$BRANCH ; then
+	debug "Rebase failed. Notifying user"
+	echo "Rebasing change $CHANGE_ID ($CHANGENO) titled $(git log --pretty=format:%s -1 HEAD) failed. Please rebase locally and then send for review." | mail -s "AUTOSUBMIT: rebase failed" $AUTHOR
+	exit 1
+fi
+
+debug "Pushing rebased change for review"
+git push origin HEAD:refs/for/$BRANCH/$TOPIC
+
+log "Uploaded rebased change for review"
