@@ -9,6 +9,15 @@ AUTOSUBMIT=autosubmit
 GERRIT=localhost
 GERRITPORT=59418
 WORKDIR=$GERRIT_SITE/tmp/autosubmit
+SCRIPTDIR=$(dirname "$0")
+LOCKFILE=$0.lock
+
+[ -f $LOCKFILE ] && exit 0
+
+trap "{ rm -f $LOCKFILE ; exit 255 ; }" EXIT SIGINT SIGTERM
+
+touch $LOCKFILE
+
 
 executeGerritCommand()
 {
@@ -30,15 +39,20 @@ debug()
 
 getChangeState()
 {
-	executeGerritCommand gerrit query --format JSON $CHANGE_ID | ./getstate.py
+	executeGerritCommand gerrit query --format JSON $CHANGE_ID | $SCRIPTDIR/getstate.py
+}
+
+getSubmitState()
+{
+	executeGerritCommand gerrit test-submit-rule --format json_compact $CHANGE_ID | $SCRIPTDIR/getstate.py
 }
 
 getLatestPatchSet()
 {
-	executeGerritCommand gerrit query --format JSON $CHANGE_ID | grep -o refs/changes/[0-9/]*
+	executeGerritCommand gerrit query --format JSON --current-patch-set $CHANGE_ID | grep -o refs/changes/[0-9/]*
 }
 
-PARAMETERS=$(getopt -o h --long debug --long change: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: -n '$(basename $0)' -- "$@")
+PARAMETERS=$(getopt -o h --long debug --long change: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: --long CRVW: --long VRIF: --long VRLX: -n '$(basename $0)' -- "$@")
 
 eval set -- "$PARAMETERS"
 
@@ -53,6 +67,9 @@ while true ; do
                 --commit) COMMIT=$2 ;;
                 --comment) MSG=$2 ;;
                 --debug) DEBUG=1; shift; continue ;;
+		--CRVW) ;;
+		--VRIF) ;;
+		--VRLX) ;;
                 --) shift; break;;
                 *) log "Internal error! Unknown parameter $1"; exit 1 ;;
         esac
@@ -80,7 +97,7 @@ fi
 
 # Check if change is ready to be submitted
 debug "Check if ready to submit"
-SUBMITSTATE=$(executeGerritCommand gerrit test-submit-rule --format json_compact $CHANGE_ID | ./getstate.py)
+SUBMITSTATE=$(getSubmitState)
 
 if [ "$SUBMITSTATE" != "OK" ]; then
 	log "Change $CHANGE_ID not ready for submit. Exiting."
@@ -105,7 +122,7 @@ if [ ! -d "$WORKDIR/$PROJECT" ]; then
 	debug "Cloning project $PROJECT"
 	git clone git://$GERRIT/$PROJECT
 	cd $PROJECT
-	git remote set-url --push origin "ssh://$AUTOSUBMIT@$GERRIT:$GERRITPORT/$PROJECT.git"
+	git remote set-url --push origin "ssh://localhost/$PROJECT.git"
 fi
 cd "$WORKDIR/$PROJECT"
 
