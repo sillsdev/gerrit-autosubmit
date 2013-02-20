@@ -102,7 +102,7 @@ getChangeInfo
 # Check if current change has 'autosubmit' as reviewer
 debug "Check for autosubmit as reviewer"
 GREPARG=\"number\":\"$CHANGENO\"
-if ! executeGerritCommand gerrit query --format JSON reviewer:$AUTOSUBMIT | grep -q $GREPARG; then
+if ! executeGerritCommand gerrit query --format JSON status:open reviewer:$AUTOSUBMIT | grep -q $GREPARG; then
 	log "Autosubmit user not assigned. Exiting."
 	exit 0
 fi
