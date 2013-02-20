@@ -7,14 +7,18 @@
 #     [--<approval category id> <score> --<approval category id> <score> ...]
 AUTOSUBMIT=autosubmit
 GERRIT=localhost
+GERRITPUSH=localhost_autosubmit
 GERRITPORT=59418
 WORKDIR=$GERRIT_SITE/tmp/autosubmit
 SCRIPTDIR=$(dirname "$0")
+CHANGEINFOFILE=$WORKDIR/changeinfo
+LOGFILE=$GERRIT_SITE/logs/autosubmit.log
 LOCKFILE=$0.lock
 
 [ -f $LOCKFILE ] && exit 0
 
-trap "{ rm -f $LOCKFILE ; exit 255 ; }" EXIT SIGINT SIGTERM
+trap 'echo "$0: line ${LINENO}: exit status: $?" >> $LOGFILE' ERR
+trap "rm $LOCKFILE; exit" INT TERM EXIT
 
 touch $LOCKFILE
 
@@ -28,18 +32,23 @@ executeGerritCommand()
 log()
 {
 	echo
-	echo "$(basename $0): $@"
+	echo "$(date +%H:%M:%S): $(basename $0) $CHANGENO: $@" >> $LOGFILE
 }
 
 debug()
 {
-	[ $DEBUG ] && echo "$(basename $0): $@"
+	[ $DEBUG ] && echo "$(date +%H:%M:%S): $(basename $0) $CHANGENO: $@" >> $LOGFILE
 	return 0
+}
+
+getChangeInfo()
+{
+	executeGerritCommand gerrit query --format JSON --current-patch-set $CHANGE_ID > $CHANGEINFOFILE
 }
 
 getChangeState()
 {
-	executeGerritCommand gerrit query --format JSON $CHANGE_ID | $SCRIPTDIR/getstate.py
+	cat $CHANGEINFOFILE | $SCRIPTDIR/getstate.py
 }
 
 getSubmitState()
@@ -49,8 +58,14 @@ getSubmitState()
 
 getLatestPatchSet()
 {
-	executeGerritCommand gerrit query --format JSON --current-patch-set $CHANGE_ID | grep -o refs/changes/[0-9/]*
+	grep -o refs/changes/[0-9/]* $CHANGEINFOFILE
 }
+
+getOwnerEmail()
+{
+	cat $CHANGEINFOFILE | ./getowneremail.py
+}
+
 
 PARAMETERS=$(getopt -o h --long debug --long change: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: --long CRVW: --long VRIF: --long VRLX: -n '$(basename $0)' -- "$@")
 
@@ -63,21 +78,26 @@ while true ; do
                 --project) PROJECT=$2 ;;
                 --branch) BRANCH=$2 ;;
                 --topic) TOPIC=$2 ;;
-                --author) AUTHOR=$2 ;;
+                --author) COMMENTAUTHOR=$2 ;;
                 --commit) COMMIT=$2 ;;
                 --comment) MSG=$2 ;;
                 --debug) DEBUG=1; shift; continue ;;
-		--CRVW) ;;
-		--VRIF) ;;
-		--VRLX) ;;
+		--CRVW) APPROV=1 ;;
+		--VRIF) APPROV=1 ;;
+		--VRLX) APPROV=1 ;;
                 --) shift; break;;
                 *) log "Internal error! Unknown parameter $1"; exit 1 ;;
         esac
         shift 2
 done
 
-CHANGENO=${CHANGE_URL#https://gerrit.lsdev.sil.org/#/c/}
-CHANGENO=${CHANGENO%/}
+if [ -z "$MSG" ] && [ -z "$APPROV" ]; then
+	log "No comment message. Exiting"
+	exit 0
+fi
+
+CHANGENO=${CHANGE_URL#https://gerrit.lsdev.sil.org/}
+getChangeInfo
 
 # Check if current change has 'autosubmit' as reviewer
 debug "Check for autosubmit as reviewer"
@@ -90,7 +110,7 @@ fi
 # Check that change isn't merged yet
 debug "Check merge state"
 CHANGESTATE=$(getChangeState)
-if [ "$CHANGESTATE" != "NEW" ]; then
+if [ "$CHANGESTATE" != "NEW" ] && [ "$CHANGESTATE" != "SUBMITTED" ]; then
 	log "Change $CHANGE_ID is not open. Exiting."
 	exit 0
 fi
@@ -108,6 +128,7 @@ fi
 debug "Try to submit"
 executeGerritCommand gerrit review --submit $COMMIT
 
+getChangeInfo
 if [ "$(getChangeState)" = "MERGED" ]; then
 	log "Change $CHANGE_ID merged successfully."
 	exit 0
@@ -117,17 +138,20 @@ fi
 debug "Submit failed. Trying to rebase"
 [ ! -d "$WORKDIR" ] && mkdir -p "$WORKDIR"
 
+unset GIT_DIR
 cd "$WORKDIR"
 if [ ! -d "$WORKDIR/$PROJECT" ]; then
 	debug "Cloning project $PROJECT"
 	git clone git://$GERRIT/$PROJECT
 	cd $PROJECT
-	git remote set-url --push origin "ssh://localhost/$PROJECT.git"
+	git remote set-url --push origin "ssh://$GERRITPUSH/$PROJECT.git"
 fi
 cd "$WORKDIR/$PROJECT"
 
-debug "Checkout change"
-git fetch git://$GERRIT/$PROJECT $(getLatestPatchSet) && git checkout FETCH_HEAD
+debug "Checkout change: git fetch git://$GERRIT/$PROJECT $(getLatestPatchSet) && git checkout FETCH_HEAD"
+git reset -q --hard origin/$BRANCH
+git fetch -q origin 2>> $LOGFILE
+git fetch -q git://$GERRIT/$PROJECT $(getLatestPatchSet) 2>> $LOGFILE && git checkout -q FETCH_HEAD
 
 # need a queue for this check, otherwise we forget to process this change!
 #debug "Check parent commit is merged"
@@ -137,13 +161,15 @@ git fetch git://$GERRIT/$PROJECT $(getLatestPatchSet) && git checkout FETCH_HEAD
 #fi
 
 debug "Rebase on origin/$BRANCH"
-if ! git rebase origin/$BRANCH ; then
+if ! git rebase -q origin/$BRANCH 2>> $LOGFILE > /dev/null; then
+	git rebase --abort
 	debug "Rebase failed. Notifying user"
-	echo "Rebasing change $CHANGE_ID ($CHANGENO) titled $(git log --pretty=format:%s -1 HEAD) failed. Please rebase locally and then send for review." | mail -s "AUTOSUBMIT: rebase failed" $AUTHOR
+	echo "Rebasing change $CHANGE_ID ($CHANGE_URL) titled \"$(git log --pretty=format:%s -1 HEAD)\" failed.
+Please rebase locally and then send for review." | mail -s "AUTOSUBMIT: rebase failed" "$(getOwnerEmail)" 2>> $LOGFILE
 	exit 1
 fi
 
 debug "Pushing rebased change for review"
-git push origin HEAD:refs/for/$BRANCH/$TOPIC
+git push -q origin HEAD:refs/for/$BRANCH/$TOPIC 2>> $LOGFILE
 
 log "Uploaded rebased change for review"

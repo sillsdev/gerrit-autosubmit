@@ -9,7 +9,7 @@
 # approves the platform specific verified categories.
 # This is necessary since Jenkins puts all approvals into one category regardless of
 # the settings if one event triggers multiple builds on the same server.
-TEMP=$(getopt -o h --long change: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: -n '$(basename $0)' -- "$@")
+TEMP=$(getopt -o h --long change: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: --long CRVW: --long VRIF: --long VRLX: -n '$(basename $0)' -- "$@")
 
 eval set -- "$TEMP"
 
@@ -27,6 +27,9 @@ while true ; do
 		--author) AUTHOR=$2 ;;
 		--commit) COMMIT=$2 ;;
 		--comment) MSG=$2 ;;
+		--CRVW) ;;
+		--VRIF) ;;
+		--VRLX) ;;
 		--) shift; break;;
 		*) echo "Internal error! Unknown parameter $1" >> $GERRIT_SITE/logs/comment-added-hook ; exit 1 ;;
 	esac
