@@ -140,20 +140,20 @@ canSubmit()
 		return 0
 	fi
 	parentCommit=$($SCRIPTDIR/getjson.py $patchset "parents" [0] <<< $line)
-	debug "parentCommit=$parentCommit"
+	#debug "parentCommit=$parentCommit"
 	if ! rebaseChange; then
 		# rebase failed
 		debug "Rebase failed"
 		return 1
 	fi
 
-	debug "HEAD^=$(git rev-parse HEAD^); parentCommit=$parentCommit"
+	#debug "HEAD^=$(git rev-parse HEAD^); parentCommit=$parentCommit"
 	if [ "$(git rev-parse HEAD^)" = "$parentCommit" ]; then
 		debug "Rebase didn't change anything. Trying to submit..."
 		return 0
 	fi
 
-	debug "HEAD^=$(git rev-parse HEAD^); remote: $(git ls-remote origin $BRANCH | cut -f1)"
+	#debug "HEAD^=$(git rev-parse HEAD^); remote: $(git ls-remote origin $BRANCH | cut -f1)"
 	if [ "$(git rev-parse HEAD^)" = "$(git ls-remote origin $BRANCH | cut -f1)" ]; then
 		debug "Pushing rebased change for review"
 		git push -q origin HEAD:refs/for/$BRANCH/$TOPIC 2>> $LOGFILE
@@ -161,7 +161,6 @@ canSubmit()
 		log "Uploaded rebased change for review"
 		debug "Setting wait info for change $CHANGE_NO, project $PROJECT"
 		currentChanges[$PROJECT]=$CHANGE_NO
-debug "***1"
 		debug "Change $CHANGE_NO rebased"
 		echo "rebased"
 	else
@@ -215,7 +214,7 @@ streamEventListener()
 	do
 		debug "Waiting for next comment"
 		if read -t 300 line; then
-			debug "read line $line"
+			#debug "read line $line"
 			patchset="patchSet"
 			TYPE=$($SCRIPTDIR/getjson.py "type" <<< $line)
 
@@ -238,7 +237,6 @@ streamEventListener()
 				fi
 
 				processChange
-debug "***2"
 			fi
 		else
 			# Check all open changes where we are assigned as reviewer. If any change is
@@ -257,7 +255,6 @@ debug "***2"
 				fi
 
 				debug "Found a change waiting for me to review..."
-				debug "$line"
 				CHANGE_ID=$($SCRIPTDIR/getjson.py "id" <<< $line)
 				CHANGE_URL=$($SCRIPTDIR/getjson.py "url" <<< $line)
 				CHANGE_NO=$($SCRIPTDIR/getjson.py "number" <<< $line)
@@ -269,20 +266,13 @@ debug "***2"
 				if  [ "$(processChange)" = "rebased" ]; then
 					# we did a rebase, so we have to wait until that's built. We do this
 					# by monitoring the incoming comments
-					debug "***3"
 					break
 				fi
-debug "***4"
 
 			done
 		fi
-	debug "***5"
 	done
 }
 
-#(ssh gerrit2 gerrit stream-events | streamEventListener)&
-
 log "**************************************************"
-#streamEventListener
-
 ssh localhost gerrit stream-events | streamEventListener --debug
