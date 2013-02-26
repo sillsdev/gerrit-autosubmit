@@ -275,4 +275,4 @@ streamEventListener()
 }
 
 log "**************************************************"
-ssh localhost gerrit stream-events | streamEventListener --debug
+streamEventListener

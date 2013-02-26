@@ -15,11 +15,11 @@
 # PATH should only include /usr/* if it runs after the mountnfs.sh script
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 DESC="Autosubmission for Gerrit"
-NAME=autosubmit
-DAEMON=/home/gerrit2/review_site/bin/autosubmit
+NAME=autosubmitsvc
+DAEMON=/home/gerrit2/review_site/bin/autosubmitsvc
 #DAEMON_ARGS="--options args"
-PIDFILE=/var/run/$NAME.pid
-SCRIPTNAME=/etc/init.d/$NAME
+#PIDFILE=/var/run/$NAME.pid
+SCRIPTNAME=/etc/init.d/autosubmit
 USERNAME=gerrit2
 
 # Exit if the package is not installed
@@ -45,9 +45,9 @@ do_start()
 	#   0 if daemon has been started
 	#   1 if daemon was already running
 	#   2 if daemon could not be started
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --chuid $USERNAME --exec $DAEMON --test > /dev/null \
+	start-stop-daemon --start --quiet --chuid $USERNAME --exec $DAEMON --test --background > /dev/null \
 		|| return 1
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --chuid $USERNAME --exec $DAEMON -- \
+	start-stop-daemon --start --quiet --chuid $USERNAME --exec $DAEMON --background -- \
 		$DAEMON_ARGS \
 		|| return 2
 }
@@ -62,7 +62,8 @@ do_stop()
 	#   1 if daemon was already stopped
 	#   2 if daemon could not be stopped
 	#   other if a failure occurred
-	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --pidfile $PIDFILE --chuid $USERNAME --name $NAME
+	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --chuid $USERNAME --name $NAME
+	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --chuid $USERNAME --name autosubmit
 	RETVAL="$?"
 	[ "$RETVAL" = 2 ] && return 2
 	# Wait for children to finish too if this is a daemon that forks
@@ -74,7 +75,7 @@ do_stop()
 	start-stop-daemon --stop --quiet --oknodo --retry=0/30/KILL/5 --chuid $USERNAME --exec $DAEMON
 	[ "$?" = 2 ] && return 2
 	# Many daemons don't delete their pidfiles when they exit.
-	rm -f $PIDFILE
+	#rm -f $PIDFILE
 	return "$RETVAL"
 }
 
@@ -87,7 +88,7 @@ do_reload() {
 	# restarting (for example, when it is sent a SIGHUP),
 	# then implement that here.
 	#
-	start-stop-daemon --stop --signal 1 --quiet --pidfile $PIDFILE --chuid $USERNAME --name $NAME
+	start-stop-daemon --stop --signal 1 --quiet --chuid $USERNAME --name $NAME
 	return 0
 }
 
