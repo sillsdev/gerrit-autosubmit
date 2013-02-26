@@ -4,8 +4,12 @@
 import json, sys
 
 parsed = json.loads(sys.stdin.readlines()[0])
+
 for i in range(1, len(sys.argv)):
-	if sys.argv[i][0:1] == "[":
+	if sys.argv[i] == "--len":
+		print len(parsed)
+		sys.exit(0)
+	elif sys.argv[i][0:1] == "[":
 		index = int(sys.argv[i][1:-1])
 		if index < len(parsed):
 			parsed = parsed[index]

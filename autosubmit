@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 # Automatically submits a change in Gerrit if change has a reviewer 'autosubmit'.
 # If necessary the change gets rebased automatically.
 
@@ -8,7 +8,7 @@ GERRIT=localhost
 GERRITPUSH=localhost_autosubmit
 GERRITPORT=59418
 WORKDIR=$GERRIT_SITE/tmp/autosubmit
-SCRIPTDIR=$(pwd)/$(dirname "$0")
+SCRIPTDIR=${SCRIPTDIR:-$(pwd)/$(dirname "$0")}
 CHANGEINFOFILE=$WORKDIR/changeinfo
 LOGFILE=$GERRIT_SITE/logs/autosubmit.log
 
@@ -97,22 +97,33 @@ checkIfChangeIsSubmittable()
 	return 0
 }
 
-submitOrRebase()
+rebaseChange()
 {
-	# Try to submit
-	debug "Try to submit"
-	executeGerritCommand gerrit review --submit "$(getCommit)"
+	debug "Checkout change: git fetch git://$GERRIT/$PROJECT $(getLatestPatchSet) && git checkout FETCH_HEAD"
+	git reset -q --hard origin/$BRANCH
+	git fetch -q origin 2>> $LOGFILE
+	git fetch -q git://$GERRIT/$PROJECT $(getLatestPatchSet) 2>> $LOGFILE && git checkout -q FETCH_HEAD
 
-	getChangeInfo
-	if [ "$(getChangeState)" = "MERGED" ]; then
-		log "Change $CHANGE_ID merged successfully."
-		return 0
+	debug "Rebase on origin/$BRANCH"
+	#if ! git rebase -q origin/$BRANCH 2>> $LOGFILE > /dev/null; then
+	if ! git rebase -q origin/$BRANCH 2>> $LOGFILE; then
+		git rebase --abort
+		debug "Rebase failed. Notifying user"
+		echo "Rebasing change $CHANGE_ID ($CHANGE_URL) titled \"$(git log --pretty=format:%s -1 HEAD)\" failed.
+	Please rebase locally and then send for review." | mail -s "AUTOSUBMIT: rebase failed" "$EMAIL" 2>> $LOGFILE
+		return 1
 	fi
+	debug "Rebase successful"
+	return 0
+}
 
-	# Submit failed. Try to rebase.
-	debug "Submit failed. Trying to rebase"
+# Check if we can submit the change.
+# Returns 0 if we can submit, or 1 if we had to rebase or if an error occurred.
+canSubmit()
+{
+	local parentCommit
+
 	[ ! -d "$WORKDIR" ] && mkdir -p "$WORKDIR"
-
 	unset GIT_DIR
 	cd "$WORKDIR"
 	if [ ! -d "$WORKDIR/$PROJECT" ]; then
@@ -123,67 +134,89 @@ submitOrRebase()
 	fi
 	cd "$WORKDIR/$PROJECT"
 
-	debug "Checkout change: git fetch git://$GERRIT/$PROJECT $(getLatestPatchSet) && git checkout FETCH_HEAD"
-	git reset -q --hard origin/$BRANCH
-	git fetch -q origin 2>> $LOGFILE
-	git fetch -q git://$GERRIT/$PROJECT $(getLatestPatchSet) 2>> $LOGFILE && git checkout -q FETCH_HEAD
+	if [ $($SCRIPTDIR/getjson.py $patchset "parents" --len <<< $line) -gt 1 ]; then
+		# Merge commit. Just try to submit...
+		log "Merge commit. Trying to submit..."
+		return 0
+	fi
+	parentCommit=$($SCRIPTDIR/getjson.py $patchset "parents" [0] <<< $line)
+	debug "parentCommit=$parentCommit"
+	if ! rebaseChange; then
+		# rebase failed
+		debug "Rebase failed"
+		return 1
+	fi
 
-	debug "Check parent commit is merged"
-	if [ $(git log --pretty=format:%H origin/$BRANCH..HEAD | wc -w) -gt 1 ]; then
-		log "Merge parent commit first. Exiting."
+	debug "HEAD^=$(git rev-parse HEAD^); parentCommit=$parentCommit"
+	if [ "$(git rev-parse HEAD^)" = "$parentCommit" ]; then
+		debug "Rebase didn't change anything. Trying to submit..."
 		return 0
 	fi
 
-	debug "Rebase on origin/$BRANCH"
-	if ! git rebase -q origin/$BRANCH 2>> $LOGFILE > /dev/null; then
-		git rebase --abort
-		debug "Rebase failed. Notifying user"
-		echo "Rebasing change $CHANGE_ID ($CHANGE_URL) titled \"$(git log --pretty=format:%s -1 HEAD)\" failed.
-	Please rebase locally and then send for review." | mail -s "AUTOSUBMIT: rebase failed" "$EMAIL" 2>> $LOGFILE
-		return 0
+	debug "HEAD^=$(git rev-parse HEAD^); remote: $(git ls-remote origin $BRANCH | cut -f1)"
+	if [ "$(git rev-parse HEAD^)" = "$(git ls-remote origin $BRANCH | cut -f1)" ]; then
+		debug "Pushing rebased change for review"
+		git push -q origin HEAD:refs/for/$BRANCH/$TOPIC 2>> $LOGFILE
+
+		log "Uploaded rebased change for review"
+		debug "Setting wait info for change $CHANGE_NO, project $PROJECT"
+		currentChanges[$PROJECT]=$CHANGE_NO
+debug "***1"
+		debug "Change $CHANGE_NO rebased"
+		echo "rebased"
+	else
+		debug "Parent is not tip of $BRANCH"
 	fi
 
-	debug "Pushing rebased change for review"
-	git push -q origin HEAD:refs/for/$BRANCH/$TOPIC 2>> $LOGFILE
-
-	log "Uploaded rebased change for review"
 	return 1
+}
+
+submitChange()
+{
+	if ! canSubmit; then
+		debug "Change $CHANGE_NO not ready for submit yet"
+		return 1
+	fi
+
+	# Try to submit
+	debug "Try to submit"
+	executeGerritCommand gerrit review --submit "$(getCommit)"
+
+	getChangeInfo
+	if [ "$(getChangeState)" = "MERGED" ]; then
+		log "Change $CHANGE_NO merged successfully."
+	else
+		log "Submit of change $CHANGE_NO failed."
+		return 1
+	fi
 }
 
 processChange()
 {
-	if [ -n "${currentChanges[$PROJECT]}" ] && [ "${currentChanges[$PROJECT]}" != "$CHANGE_NO" ]; then
+	if [[ ${currentChanges[$PROJECT]} ]] && [ "${currentChanges[$PROJECT]}" != "$CHANGE_NO" ]; then
 		debug "Waiting for change ${currentChanges[$PROJECT]}, but current change is $CHANGE_NO; skipping"
-		echo "wrong change"
 		return
 	fi
 
 	debug "Processing change $CHANGE_NO"
 	currentChanges[$PROJECT]=""
 	if ! checkIfChangeIsSubmittable; then
-		echo "not submittable"
-		return
-	fi
-	debug "Change is good; trying to submit"
-	if ! submitOrRebase; then
-		debug "Setting wait infor for change $CHANGE_NO, project $PROJECT"
-		currentChanges[$PROJECT]=$CHANGE_NO
-debug "***1"
-		echo "rebased"
+		debug "Change $CHANGE_NO not submittable"
 	else
-		echo "merged"
+		debug "Change is good"
+		submitChange
 	fi
 }
 
 streamEventListener()
 {
-	local line
-
 	log "Starting stream listener"
 	while true
 	do
 		debug "Waiting for next comment"
 		if read -t 300 line; then
+			debug "read line $line"
+			patchset="patchSet"
 			TYPE=$($SCRIPTDIR/getjson.py "type" <<< $line)
 
 			if [ "$TYPE" = "comment-added" ]; then
@@ -203,6 +236,7 @@ streamEventListener()
 					debug "Uninteresting comment; skipping"
 					continue
 				fi
+
 				processChange
 debug "***2"
 			fi
@@ -210,7 +244,18 @@ debug "***2"
 			# Check all open changes where we are assigned as reviewer. If any change is
 			# submittable we (try to) submit it.
 			debug "Got timeout waiting for comment. Checking open changes..."
-			executeGerritCommand gerrit query --format JSON status:open reviewer:$AUTOSUBMIT | while read line; do
+			OLD_IFS=$IFS
+			IFS=$'\n' changes=( $(executeGerritCommand gerrit query --format JSON status:open reviewer:$AUTOSUBMIT --current-patch-set) )
+			IFS=$OLD_IFS
+			debug "${#changes[@]} open changes are assigned to me..."
+			patchset="currentPatchSet"
+			for ((i=0; i < ${#changes[@]}; i++)); do
+				line=${changes[$i]}
+				TYPE=$($SCRIPTDIR/getjson.py "type" <<< $line)
+				if [ "$TYPE" = "stats" ]; then
+					continue
+				fi
+
 				debug "Found a change waiting for me to review..."
 				debug "$line"
 				CHANGE_ID=$($SCRIPTDIR/getjson.py "id" <<< $line)
@@ -224,14 +269,20 @@ debug "***2"
 				if  [ "$(processChange)" = "rebased" ]; then
 					# we did a rebase, so we have to wait until that's built. We do this
 					# by monitoring the incoming comments
+					debug "***3"
 					break
 				fi
+debug "***4"
+
 			done
 		fi
-	debug "***3"
+	debug "***5"
 	done
 }
 
 #(ssh gerrit2 gerrit stream-events | streamEventListener)&
 
-streamEventListener
+log "**************************************************"
+#streamEventListener
+
+ssh localhost gerrit stream-events | streamEventListener --debug
