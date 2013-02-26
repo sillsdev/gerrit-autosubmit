@@ -202,9 +202,13 @@ def Main():
       # Don't re-add verifies
       #approve_category = '--verified'
       # EB/2012-09-12: it's gives a better user experience if we re-add those as well.
-      approve_category = '--verified'
+      # EB/2013-02-26: we no longer want to add now that we have autosubmit tool
+      #approve_category = '--verified'
+      continue
     elif approval["category_id"] == "VRLX":
-      approve_category = '--verified-(linux)'
+      # EB/2013-02-26: we no longer want to add now that we have autosubmit tool
+      #approve_category = '--verified-(linux)'
+      continue
     elif approval["category_id"] == "SUBM":
       # We don't care about previous submit attempts
       continue
