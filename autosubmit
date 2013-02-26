@@ -194,7 +194,7 @@ processChange()
 {
 	if [[ ${currentChanges[$PROJECT]} ]] && [ "${currentChanges[$PROJECT]}" != "$CHANGE_NO" ]; then
 		debug "Waiting for change ${currentChanges[$PROJECT]}, but current change is $CHANGE_NO; skipping"
-		return
+		return 1
 	fi
 
 	debug "Processing change $CHANGE_NO"
@@ -203,7 +203,9 @@ processChange()
 		debug "Change $CHANGE_NO not submittable"
 	else
 		debug "Change is good"
-		submitChange
+		if ! submitChange; then
+			return 1
+		fi
 	fi
 }
 
@@ -212,6 +214,7 @@ streamEventListener()
 	log "Starting stream listener"
 	while true
 	do
+		CHANGE_NO=""
 		debug "Waiting for next comment"
 		if read -t 300 line; then
 			#debug "read line $line"
@@ -245,7 +248,8 @@ streamEventListener()
 			OLD_IFS=$IFS
 			IFS=$'\n' changes=( $(executeGerritCommand gerrit query --format JSON status:open reviewer:$AUTOSUBMIT --current-patch-set) )
 			IFS=$OLD_IFS
-			debug "${#changes[@]} open changes are assigned to me..."
+			# we always get a line that tells the row count, so we output one less
+			debug "$((${#changes[@]}-1)) open changes are assigned to me..."
 			patchset="currentPatchSet"
 			for ((i=0; i < ${#changes[@]}; i++)); do
 				line=${changes[$i]}
@@ -254,7 +258,6 @@ streamEventListener()
 					continue
 				fi
 
-				debug "Found a change waiting for me to review..."
 				CHANGE_ID=$($SCRIPTDIR/getjson.py "id" <<< $line)
 				CHANGE_URL=$($SCRIPTDIR/getjson.py "url" <<< $line)
 				CHANGE_NO=$($SCRIPTDIR/getjson.py "number" <<< $line)
@@ -263,7 +266,13 @@ streamEventListener()
 				TOPIC=$($SCRIPTDIR/getjson.py "topic" <<< $line)
 				EMAIL=$($SCRIPTDIR/getjson.py "owner" "email" <<< $line)
 
-				if  [ "$(processChange)" = "rebased" ]; then
+				if [[ ${currentChanges[$PROJECT]} ]]; then
+					# we're still waiting for a build to finish. Don't process this now!
+					continue
+				fi
+
+				debug "Found a change waiting for me to review..."
+				if  ! processChange; then
 					# we did a rebase, so we have to wait until that's built. We do this
 					# by monitoring the incoming comments
 					break
