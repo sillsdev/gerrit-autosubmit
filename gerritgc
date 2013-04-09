@@ -4,7 +4,7 @@
 cd $HOME/review_site/git
 for repo in $(find -type d -name \*.git); do
         cd $repo
-        git gc --auto
+        git gc --quiet --auto > /dev/null
         cd ..
 done
 

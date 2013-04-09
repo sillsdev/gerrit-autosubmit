@@ -179,7 +179,7 @@ submitChange()
 
 	# Try to submit
 	debug "Try to submit"
-	executeGerritCommand gerrit review -m "Change automagically submitted by autosubmit script" --submit "$(getCommit)"
+	executeGerritCommand gerrit review -m '"Change automagically submitted by autosubmit script"' --submit "$(getCommit)"
 
 	getChangeInfo
 	if [ "$(getChangeState)" = "MERGED" ]; then
