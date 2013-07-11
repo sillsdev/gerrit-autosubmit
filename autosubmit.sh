@@ -63,7 +63,7 @@ do_stop()
 	#   2 if daemon could not be stopped
 	#   other if a failure occurred
 	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --chuid $USERNAME --name $NAME
-	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --chuid $USERNAME --name autosubmit
+	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --chuid $USERNAME --name autosubmit 
 	RETVAL="$?"
 	[ "$RETVAL" = 2 ] && return 2
 	# Wait for children to finish too if this is a daemon that forks
@@ -121,6 +121,7 @@ case "$1" in
 	do_stop
 	case "$?" in
 	  0|1)
+		sleep 10
 		do_start
 		case "$?" in
 			0) log_end_msg 0 ;;

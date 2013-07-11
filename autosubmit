@@ -52,7 +52,7 @@ getChangeState()
 
 getSubmitState()
 {
-	executeGerritCommand gerrit test-submit-rule --format json_compact $CHANGE_ID | $SCRIPTDIR/getjson.py "status"
+	executeGerritCommand gerrit test-submit rule $CHANGE_ID | $SCRIPTDIR/getjson.py "status"
 }
 
 getLatestPatchSet()

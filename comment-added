@@ -1,19 +1,22 @@
 #!/bin/bash
 # Gerrit hook script that gets called after a comment gets added :-) with the
 # following parameters:
-# comment-added --change <change id> --change-url <change url> --project <project name>
-#     --branch <branch> --author <comment author> --commit <commit> --comment <comment>
-#     [--<approval category id> <score> --<approval category id> <score> ...]
+#
+# comment-added --change <change id> --is-draft <boolean>
+#     --change-url <change url> --project <project name> --branch <branch>
+#     --topic <topic> --author <comment author> --commit <commit>
+#     --comment <comment> [--<approval category id> <score> 
+#     --<approval category id> <score> ...]
 #
 # This script checks comment text to see if it is a comment that Jenkins made. It
 # approves the platform specific verified categories.
 # This is necessary since Jenkins puts all approvals into one category regardless of
 # the settings if one event triggers multiple builds on the same server.
-TEMP=$(getopt -o h --long change: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: --long CRVW: --long VRIF: --long VRLX: -n '$(basename $0)' -- "$@")
+TEMP=$(getopt -o h --long change: --long is-draft: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: --long CRVW: --long VRIF: --long VRLX: --long Verified: --long verified: --long Verified-Linux: --long verified-linux: --long Code-Review: --long code-review: -n '$(basename $0)' -- "$@")
 
 eval set -- "$TEMP"
 
-if [ $# -lt 17 ]; then
+if [ $# -lt 19 ]; then
 	NOAPPROVALS=1
 fi
 
@@ -27,9 +30,16 @@ while true ; do
 		--author) AUTHOR=$2 ;;
 		--commit) COMMIT=$2 ;;
 		--comment) MSG=$2 ;;
+		--is-draft) ;;
 		--CRVW) ;;
+		--Code-Review) ;;
+		--code-review) ;;
 		--VRIF) ;;
+		--Verified) ;;
+		--verified) ;;
 		--VRLX) ;;
+		--Verified-Linux) ;;
+		--verified-linux) ;;
 		--) shift; break;;
 		*) echo "Internal error! Unknown parameter $1" >> $GERRIT_SITE/logs/comment-added-hook ; exit 1 ;;
 	esac
@@ -54,7 +64,7 @@ TOADDMSG=
 for line in $MSG; do
 	case $line in
 		*-Linux32-*|*-Linux64-*|*-Linux-*)
-			CATEGORY="--verified-\(linux\)"
+			CATEGORY="--verified-linux"
 			CATMSG="Verified-Linux"
 			;;
 		*-Win32*|-Win64*|*-Win-*)
