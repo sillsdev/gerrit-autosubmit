@@ -3,9 +3,14 @@
 # is submittable
 import json, sys
 
-parsed = json.loads(sys.stdin.readlines()[0])
+startArgs = 1
+if sys.argv > 1 and sys.argv[1] == "--readstring":
+	startArgs = 2
+	parsed = json.loads(sys.stdin.readlines()[0])
+else:
+	parsed = json.load(sys.stdin)
 
-for i in range(1, len(sys.argv)):
+for i in range(startArgs, len(sys.argv)):
 	if sys.argv[i] == "--len":
 		print len(parsed)
 		sys.exit(0)

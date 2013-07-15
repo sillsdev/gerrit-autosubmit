@@ -47,12 +47,12 @@ getChangeInfo()
 
 getChangeState()
 {
-	cat $CHANGEINFOFILE | $SCRIPTDIR/getjson.py "status"
+	cat $CHANGEINFOFILE | $SCRIPTDIR/getjson.py --readstring "status"
 }
 
 getSubmitState()
 {
-	executeGerritCommand gerrit test-submit rule $CHANGE_ID | $SCRIPTDIR/getjson.py "status"
+	executeGerritCommand gerrit test-submit rule $CHANGE_NO | $SCRIPTDIR/getjson.py "[0]" "status"
 }
 
 getLatestPatchSet()
@@ -62,7 +62,7 @@ getLatestPatchSet()
 
 getCommit()
 {
-	cat $CHANGEINFOFILE | $SCRIPTDIR/getjson.py "currentPatchSet" "revision"
+	cat $CHANGEINFOFILE | $SCRIPTDIR/getjson.py --readstring "currentPatchSet" "revision"
 }
 
 checkIfChangeIsSubmittable()
@@ -134,12 +134,12 @@ canSubmit()
 	fi
 	cd "$WORKDIR/$PROJECT"
 
-	if [ $($SCRIPTDIR/getjson.py $patchset "parents" --len <<< $line) -gt 1 ]; then
+	if [ $($SCRIPTDIR/getjson.py --readstring $patchset "parents" --len <<< $line) -gt 1 ]; then
 		# Merge commit. Just try to submit...
 		log "Merge commit. Trying to submit..."
 		return 0
 	fi
-	parentCommit=$($SCRIPTDIR/getjson.py $patchset "parents" [0] <<< $line)
+	parentCommit=$($SCRIPTDIR/getjson.py --readstring $patchset "parents" [0] <<< $line)
 	#debug "parentCommit=$parentCommit"
 	if ! rebaseChange; then
 		# rebase failed
@@ -219,22 +219,22 @@ streamEventListener()
 		if read -t 300 line; then
 			#debug "read line $line"
 			patchset="patchSet"
-			TYPE=$($SCRIPTDIR/getjson.py "type" <<< $line)
+			TYPE=$($SCRIPTDIR/getjson.py --readstring "type" <<< $line)
 
 			if [ "$TYPE" = "comment-added" ]; then
 				# We got a comment. Check if we're assigned as reviewer
 				# and if the change is submittable. If it is we (try to)
 				# submit it.
 				debug "Read line for comment: $line"
-				CHANGE_ID=$($SCRIPTDIR/getjson.py "change" "id" <<< $line)
-				CHANGE_URL=$($SCRIPTDIR/getjson.py "change" "url" <<< $line)
-				CHANGE_NO=$($SCRIPTDIR/getjson.py "change" "number" <<< $line)
-				PROJECT=$($SCRIPTDIR/getjson.py "change" "project" <<< $line)
-				BRANCH=$($SCRIPTDIR/getjson.py "change" "branch" <<< $line)
-				TOPIC=$($SCRIPTDIR/getjson.py "change" "topic" <<< $line)
-				EMAIL=$($SCRIPTDIR/getjson.py "change" "owner" "email" <<< $line)
+				CHANGE_ID=$($SCRIPTDIR/getjson.py --readstring "change" "id" <<< $line)
+				CHANGE_URL=$($SCRIPTDIR/getjson.py --readstring "change" "url" <<< $line)
+				CHANGE_NO=$($SCRIPTDIR/getjson.py --readstring "change" "number" <<< $line)
+				PROJECT=$($SCRIPTDIR/getjson.py --readstring "change" "project" <<< $line)
+				BRANCH=$($SCRIPTDIR/getjson.py --readstring "change" "branch" <<< $line)
+				TOPIC=$($SCRIPTDIR/getjson.py --readstring "change" "topic" <<< $line)
+				EMAIL=$($SCRIPTDIR/getjson.py --readstring "change" "owner" "email" <<< $line)
 
-				if [ "$($SCRIPTDIR/getjson.py "comment" <<< $line)" = "" ] && [ "$($SCRIPTDIR/getjson.py "approvals" <<< $line)" = "" ]; then
+				if [ "$($SCRIPTDIR/getjson.py --readstring "comment" <<< $line)" = "" ] && [ "$($SCRIPTDIR/getjson.py --readstring "approvals" <<< $line)" = "" ]; then
 					debug "Uninteresting comment; skipping"
 					continue
 				fi
@@ -253,18 +253,18 @@ streamEventListener()
 			patchset="currentPatchSet"
 			for ((i=0; i < ${#changes[@]}; i++)); do
 				line=${changes[$i]}
-				TYPE=$($SCRIPTDIR/getjson.py "type" <<< $line)
+				TYPE=$($SCRIPTDIR/getjson.py --readstring "type" <<< $line)
 				if [ "$TYPE" = "stats" ]; then
 					continue
 				fi
 
-				CHANGE_ID=$($SCRIPTDIR/getjson.py "id" <<< $line)
-				CHANGE_URL=$($SCRIPTDIR/getjson.py "url" <<< $line)
-				CHANGE_NO=$($SCRIPTDIR/getjson.py "number" <<< $line)
-				PROJECT=$($SCRIPTDIR/getjson.py "project" <<< $line)
-				BRANCH=$($SCRIPTDIR/getjson.py "branch" <<< $line)
-				TOPIC=$($SCRIPTDIR/getjson.py "topic" <<< $line)
-				EMAIL=$($SCRIPTDIR/getjson.py "owner" "email" <<< $line)
+				CHANGE_ID=$($SCRIPTDIR/getjson.py --readstring "id" <<< $line)
+				CHANGE_URL=$($SCRIPTDIR/getjson.py --readstring "url" <<< $line)
+				CHANGE_NO=$($SCRIPTDIR/getjson.py --readstring "number" <<< $line)
+				PROJECT=$($SCRIPTDIR/getjson.py --readstring "project" <<< $line)
+				BRANCH=$($SCRIPTDIR/getjson.py --readstring "branch" <<< $line)
+				TOPIC=$($SCRIPTDIR/getjson.py --readstring "topic" <<< $line)
+				EMAIL=$($SCRIPTDIR/getjson.py --readstring "owner" "email" <<< $line)
 
 				if [[ ${currentChanges[$PROJECT]} ]]; then
 					# we're still waiting for a build to finish. Don't process this now!
