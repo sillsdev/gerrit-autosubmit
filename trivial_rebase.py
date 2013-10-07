@@ -156,7 +156,9 @@ class TrivialRebase:
     email_addr = self.GsqlQuery(sql_query)
 
     json_dict = json.loads(email_addr[0], strict=False)
-    return json_dict["columns"]["preferred_email"]
+    if "preferred_email" in json_dict["columns"]:
+      return json_dict["columns"]["preferred_email"]
+    return "jenkins@sil.org"
 
   def GetPatchId(self, revision):
     git_show_cmd = ['git', 'show', revision]
