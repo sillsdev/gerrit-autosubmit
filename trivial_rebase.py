@@ -157,8 +157,11 @@ class TrivialRebase:
 
     json_dict = json.loads(email_addr[0], strict=False)
     if "preferred_email" in json_dict["columns"]:
-      return json_dict["columns"]["preferred_email"]
-    return "jenkins@sil.org"
+      email = json_dict["columns"]["preferred_email"]
+      if email == "jenkins@sil.org":
+        return "jenkins"
+      return email
+    return "jenkins"
 
   def GetPatchId(self, revision):
     git_show_cmd = ['git', 'show', revision]
