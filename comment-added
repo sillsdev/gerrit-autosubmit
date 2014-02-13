@@ -12,6 +12,7 @@
 # approves the platform specific verified categories.
 # This is necessary since Jenkins puts all approvals into one category regardless of
 # the settings if one event triggers multiple builds on the same server.
+
 TEMP=$(getopt -o h --long change: --long is-draft: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: --long CRVW: --long VRIF: --long VRLX: --long Verified: --long verified: --long Verified-Linux: --long verified-linux: --long Code-Review: --long code-review: -n '$(basename $0)' -- "$@")
 
 eval set -- "$TEMP"
@@ -64,18 +65,18 @@ TOADDMSG=
 for line in $MSG; do
 	case $line in
 		*-Linux32-*|*-Linux64-*|*-Linux-*)
-			CATEGORY="--verified-linux"
+			CATEGORY="Verified-Linux"
 			CATMSG="Verified-Linux"
 			;;
 		*-Win32*|-Win64*|*-Win-*)
-			CATEGORY="--verified"
+			CATEGORY="Verified"
 			CATMSG="Verified"
 			;;
 	esac
 	RESULT=$(echo $line | awk '{print $3}')
 	case $RESULT in
 		SUCCESS)
-			VAL="+1"
+			VAL="1"
 			;;
 		FAILURE)
 			VAL="-1"
@@ -88,13 +89,23 @@ for line in $MSG; do
 			;;
 	esac
 	echo "Adding review: $CATEGORY $VAL for commit $COMMIT" >> $GERRIT_SITE/logs/comment-added-hook
-	TOADDCAT="$TOADDCAT $CATEGORY $VAL"
+	TOADDCAT="$TOADDCAT --label $CATEGORY=$VAL"
 	TOADDMSG="$TOADDMSG $CATMSG $VAL"
 done
 
 if [ -n "$TOADDCAT" ]; then
+	# Check if project has verified-linux label. This is the case
+	# if the parent project is *Crossplatform*
+	JSON=$(curl --noproxy localhost --silent --show-error http://localhost:38081/access/?project=$PROJECT | tail -n +2)
+	XPLAT=$($(dirname "$0")/getjson.py --readstring "$PROJECT" "inherits_from" "id" <<< $JSON)
+
+	if ! grep -q Crossplatform <<< $XPLAT ; then
+		echo "Skipping; no crossplatform project" >> $GERRIT_SITE/logs/comment-added-hook
+		exit 0
+	fi
+
 	ssh -l "Gerrit Code Review" -p 59418 localhost -i $GERRIT_SITE/etc/ssh_host_dsa_key \
 		suexec --as jenkins -- \
 		gerrit review $TOADDCAT --project $PROJECT \
-		--message "\"Automatically added by comment-added hook: $TOADDMSG \"" $COMMIT
+		--message "\"Automatically added by comment-added hook: $TOADDMSG \"" $COMMIT 
 fi
