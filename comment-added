@@ -3,17 +3,17 @@
 # following parameters:
 #
 # comment-added --change <change id> --is-draft <boolean>
-#     --change-url <change url> --project <project name> --branch <branch>
-#     --topic <topic> --author <comment author> --commit <commit>
-#     --comment <comment> [--<approval category id> <score> 
-#     --<approval category id> <score> ...]
+#     --change-url <change url> --change-owner <change owner>
+#     --project <project name> --branch <branch> --topic <topic>
+#     --author <comment author> --commit <commit> --comment <comment>
+#     [--<approval category id> <score> --<approval category id> <score> ...]
 #
 # This script checks comment text to see if it is a comment that Jenkins made. It
 # approves the platform specific verified categories.
 # This is necessary since Jenkins puts all approvals into one category regardless of
 # the settings if one event triggers multiple builds on the same server.
 
-TEMP=$(getopt -o h --long change: --long is-draft: --long change-url: --long project: --long branch: --long topic: --long author: --long commit: --long comment: --long CRVW: --long VRIF: --long VRLX: --long Verified: --long verified: --long Verified-Linux: --long verified-linux: --long Code-Review: --long code-review: -n '$(basename $0)' -- "$@")
+TEMP=$(getopt -o h --long change: --long is-draft: --long change-url: --long change-owner: --long project: --long branch: --long topic: --long author: --long commit: --long comment: --long CRVW: --long VRIF: --long VRLX: --long Verified: --long verified: --long Verified-Linux: --long verified-linux: --long Code-Review: --long code-review: -n '$(basename $0)' -- "$@")
 
 eval set -- "$TEMP"
 
@@ -24,6 +24,7 @@ fi
 while true ; do
 	case "$1" in
 		--change) CHANGE_ID=$2 ;;
+		--change-owner) ;;
 		--change-url) CHANGE_URL=$2 ;;
 		--project) PROJECT=$2 ;;
 		--branch) BRANCH=$2 ;;
