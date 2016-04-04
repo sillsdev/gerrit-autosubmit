@@ -156,7 +156,7 @@ canSubmit()
 	#debug "HEAD^=$(git rev-parse HEAD^); remote: $(git ls-remote origin $BRANCH | cut -f1)"
 	if [ "$(git rev-parse HEAD^)" = "$(git ls-remote origin $BRANCH | cut -f1)" ]; then
 		debug "Pushing rebased change for review"
-		git push -q origin HEAD:refs/for/$BRANCH/$TOPIC 2>> $LOGFILE
+		git push -q origin HEAD:refs/for/$BRANCH${TOPIC:+/}$TOPIC 2>> $LOGFILE
 
 		log "Uploaded rebased change for review"
 		debug "Setting wait info for change $CHANGE_NO, project $PROJECT"
