@@ -1,2 +1,2 @@
 #!/bin/bash
-ssh localhost gerrit stream-events | $(dirname "$0")/autosubmit --debug
+ssh localhost gerrit stream-events -s comment-added | $(dirname "$0")/autosubmit --debug

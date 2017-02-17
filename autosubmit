@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 # Automatically submits a change in Gerrit if change has a reviewer 'autosubmit'.
 # If necessary the change gets rebased automatically.
 
@@ -36,8 +36,7 @@ debug()
 
 executeGerritCommand()
 {
-	ssh -l "Gerrit Code Review" -p $GERRITPORT localhost -i $GERRIT_SITE/etc/ssh_host_dsa_key \
-		suexec --as $AUTOSUBMIT -- "$@"
+	ssh -l $AUTOSUBMIT -p $GERRITPORT localhost -i $GERRIT_SITE/etc/ssh_host_dsa_key $@
 }
 
 getChangeInfo()
