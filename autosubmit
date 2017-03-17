@@ -254,7 +254,6 @@ streamEventListener()
 		patchset="currentPatchSet"
 		for ((i=0; i < ${#changes[@]}; i++)); do
 			line=${changes[$i]}
-			debug "looping line $i: read $line"
 			TYPE=$($SCRIPTDIR/getjson.py --readstring "type" <<< $line)
 			if [ "$TYPE" = "stats" ]; then
 				continue
