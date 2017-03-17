@@ -54,7 +54,7 @@ if [ $NOAPPROVAL ]; then
 	exit 0
 fi
 
-if ! echo -e "$MSG" | grep -q -E "/(Gerrit-)?[A-Z][A-Za-z_]+-(Linux|Win)(32|64|-all|-any)-([A-Za-z_0-9.]+-)?(debug|release)(-.+)?/" ; then
+if ! echo -e "$MSG" | grep -q -E "/(Gerrit-)?[A-Z][A-Za-z_]+-(Linux|Win)(32|64|dows|-all|-any)-([A-Za-z_0-9.]+-)?(debug|release)(-.+)?/" ; then
 	# Comment doesn't mention any project - not relevant
 	echo "Comment doesn't mention project (Change $CHANGE_ID)"  >> $GERRIT_SITE/logs/comment-added-hook
 	exit 0
@@ -69,7 +69,7 @@ for line in $MSG; do
 			CATEGORY="Verified-Linux"
 			CATMSG="Verified-Linux"
 			;;
-		*-Win32*|-Win64*|*-Win-*)
+		*-Win32*|-Win64*|*-Win-*|*-Windows-*)
 			CATEGORY="Verified"
 			CATMSG="Verified"
 			;;
