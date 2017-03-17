@@ -1,6 +1,8 @@
-#!/bin/bash -e
+#!/bin/bash
 # Automatically submits a change in Gerrit if change has a reviewer 'autosubmit'.
 # If necessary the change gets rebased automatically.
+#
+# NOTE: Don't set -e - we want to continue even if a command fails!
 
 AUTOSUBMIT=autosubmit
 GERRIT_SITE=~/review_site
@@ -89,7 +91,7 @@ checkIfChangeIsSubmittable()
 	SUBMITSTATE=$(getSubmitState)
 
 	if [ "$SUBMITSTATE" != "OK" ]; then
-		log "Change $CHANGE_ID not ready for submit. Exiting."
+		log "Change $CHANGE_ID not ready for submit. Exiting. ($SUBMITSTATE)"
 		return 3
 	fi
 
@@ -240,46 +242,41 @@ streamEventListener()
 
 				processChange
 			fi
-		else
-			# Check all open changes where we are assigned as reviewer. If any change is
-			# submittable we (try to) submit it.
-			debug "Got timeout waiting for comment. Checking open changes..."
-			OLD_IFS=$IFS
-			IFS=$'\n' changes=( $(executeGerritCommand gerrit query --format JSON status:open reviewer:$AUTOSUBMIT --current-patch-set) )
-			IFS=$OLD_IFS
-			# we always get a line that tells the row count, so we output one less
-			debug "$((${#changes[@]}-1)) open changes are assigned to me..."
-			patchset="currentPatchSet"
-			for ((i=0; i < ${#changes[@]}; i++)); do
-				line=${changes[$i]}
-				TYPE=$($SCRIPTDIR/getjson.py --readstring "type" <<< $line)
-				if [ "$TYPE" = "stats" ]; then
-					continue
-				fi
-
-				CHANGE_ID=$($SCRIPTDIR/getjson.py --readstring "id" <<< $line)
-				CHANGE_URL=$($SCRIPTDIR/getjson.py --readstring "url" <<< $line)
-				CHANGE_NO=$($SCRIPTDIR/getjson.py --readstring "number" <<< $line)
-				PROJECT=$($SCRIPTDIR/getjson.py --readstring "project" <<< $line)
-				BRANCH=$($SCRIPTDIR/getjson.py --readstring "branch" <<< $line)
-				TOPIC=$($SCRIPTDIR/getjson.py --readstring "topic" <<< $line)
-				EMAIL=$($SCRIPTDIR/getjson.py --readstring "owner" "email" <<< $line)
-
-				if [[ ${currentChanges[$PROJECT]} ]]; then
-					# we're still waiting for a build to finish. Don't process this now!
-					debug "We're still waiting for a build to finish for $PROJECT (${currentChanges[$PROJECT]})"
-					continue
-				fi
-
-				debug "Found a change waiting for me to review..."
-				if  ! processChange; then
-					# we did a rebase, so we have to wait until that's built. We do this
-					# by monitoring the incoming comments
-					break
-				fi
-
-			done
 		fi
+		# Check all open changes where we are assigned as reviewer. If any change is
+		# submittable we (try to) submit it.
+		debug "Got timeout waiting for comment. Checking open changes..."
+		OLD_IFS=$IFS
+		IFS=$'\n' changes=( $(executeGerritCommand gerrit query --format JSON status:open reviewer:$AUTOSUBMIT --current-patch-set) )
+		IFS=$OLD_IFS
+		# we always get a line that tells the row count, so we output one less
+		debug "$((${#changes[@]}-1)) open changes are assigned to me..."
+		patchset="currentPatchSet"
+		for ((i=0; i < ${#changes[@]}; i++)); do
+			line=${changes[$i]}
+			debug "looping line $i: read $line"
+			TYPE=$($SCRIPTDIR/getjson.py --readstring "type" <<< $line)
+			if [ "$TYPE" = "stats" ]; then
+				continue
+			fi
+
+			CHANGE_ID=$($SCRIPTDIR/getjson.py --readstring "id" <<< $line)
+			CHANGE_URL=$($SCRIPTDIR/getjson.py --readstring "url" <<< $line)
+			CHANGE_NO=$($SCRIPTDIR/getjson.py --readstring "number" <<< $line)
+			PROJECT=$($SCRIPTDIR/getjson.py --readstring "project" <<< $line)
+			BRANCH=$($SCRIPTDIR/getjson.py --readstring "branch" <<< $line)
+			TOPIC=$($SCRIPTDIR/getjson.py --readstring "topic" <<< $line)
+			EMAIL=$($SCRIPTDIR/getjson.py --readstring "owner" "email" <<< $line)
+
+			if [[ ${currentChanges[$PROJECT]} ]]; then
+				# we're still waiting for a build to finish. Don't process this now!
+				debug "We're still waiting for a build to finish for $PROJECT (${currentChanges[$PROJECT]})"
+				continue
+			fi
+
+			debug "Found a change waiting for me to review..."
+			processChange
+		done
 	done
 }
 
