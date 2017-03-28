@@ -241,11 +241,15 @@ streamEventListener()
 				fi
 
 				processChange
+			else
+				debug "Got gerrit event $TYPE"
 			fi
+			debug "Checking all open changes..."
+		else
+			debug "Got timeout waiting for comment. Checking open changes..."
 		fi
 		# Check all open changes where we are assigned as reviewer. If any change is
 		# submittable we (try to) submit it.
-		debug "Got timeout waiting for comment. Checking open changes..."
 		OLD_IFS=$IFS
 		IFS=$'\n' changes=( $(executeGerritCommand gerrit query --format JSON status:open reviewer:$AUTOSUBMIT --current-patch-set) )
 		IFS=$OLD_IFS
