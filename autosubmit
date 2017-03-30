@@ -257,7 +257,7 @@ streamEventListener()
 				debug "Got gerrit event $TYPE"
 			fi
 			debug "Checking all open changes..."
-		else if (( $result > 128 ))
+		elif (( $result > 128 )); then
 			if (( $(date +%s) - $lasttimeout <= $TIMEOUT )); then
 				restartAutosubmit
 				exit 0
