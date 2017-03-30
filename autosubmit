@@ -13,6 +13,7 @@ WORKDIR=$GERRIT_SITE/tmp/autosubmit
 SCRIPTDIR=${SCRIPTDIR:-$(pwd)/$(dirname "$0")}
 CHANGEINFOFILE=$WORKDIR/changeinfo
 LOGFILE=$GERRIT_SITE/logs/autosubmit.log
+TIMEOUT=300
 
 trap 'echo "$0: line ${LINENO}: exit status: $?"' ERR
 
@@ -210,14 +211,25 @@ processChange()
 	fi
 }
 
+restartAutosubmit()
+{
+	debug "Scheduling restart..."
+	echo "${SCRIPTDIR}/autosubmit.sh restart " | at now + 1 minute
+	debug "Exiting."
+	exit 0
+}
+
 streamEventListener()
 {
-	log "Starting stream listener"
+	log "Starting stream listener at $(date)"
+	lasttimeout=0
 	while true
 	do
 		CHANGE_NO=""
 		debug "Waiting for next comment"
-		if read -t 300 line; then
+		read -r -t $TIMEOUT line
+		result=$?
+		if (( $result == 0 )); then
 			#debug "read line $line"
 			patchset="patchSet"
 			TYPE=$($SCRIPTDIR/getjson.py --readstring "type" <<< $line)
@@ -245,8 +257,16 @@ streamEventListener()
 				debug "Got gerrit event $TYPE"
 			fi
 			debug "Checking all open changes..."
-		else
+		else if (( $result > 128 ))
+			if (( $(date +%s) - $lasttimeout <= $TIMEOUT )); then
+				restartAutosubmit
+				exit 0
+			fi
 			debug "Got timeout waiting for comment. Checking open changes..."
+		else
+			debug "Read returned with exit code $result. Restarting."
+			restartAutosubmit
+			exit 0
 		fi
 		# Check all open changes where we are assigned as reviewer. If any change is
 		# submittable we (try to) submit it.
