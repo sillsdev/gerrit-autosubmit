@@ -39,7 +39,7 @@ debug()
 
 executeGerritCommand()
 {
-	ssh -l $AUTOSUBMIT -p $GERRITPORT localhost -i $GERRIT_SITE/etc/ssh_host_dsa_key $@
+	ssh -l $AUTOSUBMIT -p $GERRITPORT localhost -i $GERRIT_SITE/etc/ssh_host_ecdsa_key $@
 }
 
 getChangeInfo()
