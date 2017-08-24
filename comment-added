@@ -105,7 +105,7 @@ if [ -n "$TOADDCAT" ]; then
 		exit 0
 	fi
 
-	ssh -l "Gerrit Code Review" -p 59418 localhost -i $GERRIT_SITE/etc/ssh_host_dsa_key \
+	ssh -l "Automated Hook Processor" -p 59418 localhost -i $GERRIT_SITE/etc/ssh_host_rsa_key \
 		suexec --as jenkins -- \
 		gerrit review $TOADDCAT --project $PROJECT \
 		--message "\"Automatically added by comment-added hook: $TOADDMSG \"" $COMMIT 
