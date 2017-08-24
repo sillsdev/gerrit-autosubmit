@@ -13,6 +13,10 @@
 # This is necessary since Jenkins puts all approvals into one category regardless of
 # the settings if one event triggers multiple builds on the same server.
 
+log() {
+	echo $1 >> $GERRIT_SITE/logs/comment-added-hook
+}
+
 TEMP=$(getopt -o h --long change: --long is-draft: --long change-url: --long change-owner: --long project: --long branch: --long topic: --long author: --long commit: --long comment: --long CRVW: --long VRIF: --long VRLX: --long Verified: --long verified: --long Verified-Linux: --long verified-linux: --long Code-Review: --long code-review: -n '$(basename $0)' -- "$@")
 
 eval set -- "$TEMP"
@@ -43,20 +47,19 @@ while true ; do
 		--Verified-Linux) ;;
 		--verified-linux) ;;
 		--) shift; break;;
-		*) echo "Internal error! Unknown parameter $1" >> $GERRIT_SITE/logs/comment-added-hook ; exit 1 ;;
+		*) log "Internal error! Unknown parameter $1" ; exit 1 ;;
 	esac
 	shift 2
 done
 
 if [ $NOAPPROVAL ]; then
 	# We don't have any approval categories - no relevant comment
-	echo "No approval categories (Change $CHANGE_ID)"  >> $GERRIT_SITE/logs/comment-added-hook
+	log "No approval categories (Change $CHANGE_ID)"
 	exit 0
 fi
 
-if ! echo -e "$MSG" | grep -q -E "/(Gerrit-)?[A-Z][A-Za-z_]+-(Linux|Win)(32|64|dows|-all|-any)-([A-Za-z_0-9.]+-)?(debug|release)(-.+)?/" ; then
-	# Comment doesn't mention any project - not relevant
-	echo "Comment doesn't mention project (Change $CHANGE_ID)"  >> $GERRIT_SITE/logs/comment-added-hook
+if ! echo -e "$MSG" | grep -q -E "/Build (Started|Successful|Failed|Unstable)/" ; then
+	log "No build status related message (Change $CHANGE_ID)"
 	exit 0
 fi
 
@@ -65,11 +68,11 @@ TOADDCAT=
 TOADDMSG=
 for line in $MSG; do
 	case $line in
-		*-Linux32-*|*-Linux64-*|*-Linux-*)
+		*-Linux*)
 			CATEGORY="Verified-Linux"
 			CATMSG="Verified-Linux"
 			;;
-		*-Win32*|-Win64*|*-Win-*|*-Windows-*)
+		*-Win*)
 			CATEGORY="Verified"
 			CATMSG="Verified"
 			;;
@@ -89,7 +92,7 @@ for line in $MSG; do
 			continue
 			;;
 	esac
-	echo "Adding review: $CATEGORY $VAL for commit $COMMIT" >> $GERRIT_SITE/logs/comment-added-hook
+	log "Adding review: $CATEGORY $VAL for commit $COMMIT"
 	TOADDCAT="$TOADDCAT --label $CATEGORY=$VAL"
 	TOADDMSG="$TOADDMSG $CATMSG $VAL"
 done
@@ -101,12 +104,12 @@ if [ -n "$TOADDCAT" ]; then
 	XPLAT=$($(dirname "$0")/getjson.py --readstring "$PROJECT" "inherits_from" "id" <<< $JSON)
 
 	if ! grep -q Crossplatform <<< $XPLAT ; then
-		echo "Skipping; no crossplatform project" >> $GERRIT_SITE/logs/comment-added-hook
+		log "Skipping; no crossplatform project"
 		exit 0
 	fi
 
 	ssh -l "Automated Hook Processor" -p 59418 localhost -i $GERRIT_SITE/etc/ssh_host_rsa_key \
 		suexec --as jenkins -- \
 		gerrit review $TOADDCAT --project $PROJECT \
-		--message "\"Automatically added by comment-added hook: $TOADDMSG \"" $COMMIT 
+		--message "\"Automatically added by comment-added hook: $TOADDMSG \"" $COMMIT
 fi
