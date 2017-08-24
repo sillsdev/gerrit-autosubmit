@@ -116,6 +116,6 @@ if [ -n "$TOADDCAT" ]; then
 
 	ssh -l "hooks" -p 59418 localhost -i $GERRIT_SITE/etc/ssh_host_ecdsa_key \
 		suexec --as jenkins -- \
-		gerrit review $TOADDCAT --project $PROJECT \
+		gerrit review $TOADDCAT --project $PROJECT --notify NONE \
 		--message "\"Automatically added by comment-added hook: $TOADDMSG \"" $COMMIT
 fi
