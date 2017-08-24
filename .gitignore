@@ -2,3 +2,4 @@ gerrit.war
 gerrit.sh
 gerrit.service
 gerrit.socket
+.vscode/

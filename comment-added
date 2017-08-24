@@ -58,9 +58,16 @@ if [ $NOAPPROVAL ]; then
 	exit 0
 fi
 
-if ! echo -e "$MSG" | grep -q -E "/Build (Started|Successful|Failed|Unstable)/" ; then
+STATUS_REGEX="Build (Started|Successful|Failed|Unstable)"
+if ! [[ $MSG =~ $STATUS_REGEX ]]  ; then
 	log "No build status related message (Change $CHANGE_ID)"
 	exit 0
+fi
+
+if [[ $(git config -f $GERRIT_SITE/etc/gerrit.config httpd.listenUrl) =~ [^:]+:\/\/[^:]+:([0-9]+) ]]; then
+	PORT=${BASH_REMATCH[1]}
+else
+	PORT=38081
 fi
 
 IFS=$'\n'
@@ -98,17 +105,16 @@ for line in $MSG; do
 done
 
 if [ -n "$TOADDCAT" ]; then
-	# Check if project has verified-linux label. This is the case
-	# if the parent project is *Crossplatform*
-	JSON=$(curl --noproxy localhost --silent --show-error http://localhost:38081/access/?project=$PROJECT | tail -n +2)
-	XPLAT=$($(dirname "$0")/getjson.py --readstring "$PROJECT" "inherits_from" "id" <<< $JSON)
+	# Check if the parent project is *Crossplatform*
+	JSON=$(curl --noproxy localhost --silent --show-error http://localhost:$PORT/projects/$PROJECT | tail -n +2)
+	XPLAT=$($(dirname "$0")/getjson.py --readstring "parent" <<< $JSON)
 
-	if ! grep -q Crossplatform <<< $XPLAT ; then
+	if ! [[ $XPLAT =~ Crossplatform ]] ; then
 		log "Skipping; no crossplatform project"
 		exit 0
 	fi
 
-	ssh -l "Automated Hook Processor" -p 59418 localhost -i $GERRIT_SITE/etc/ssh_host_rsa_key \
+	ssh -l "hooks" -p 59418 localhost -i $GERRIT_SITE/etc/ssh_host_ecdsa_key \
 		suexec --as jenkins -- \
 		gerrit review $TOADDCAT --project $PROJECT \
 		--message "\"Automatically added by comment-added hook: $TOADDMSG \"" $COMMIT
