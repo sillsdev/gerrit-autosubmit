@@ -64,10 +64,10 @@ do_stop()
 	#   other if a failure occurred
 	# Also delete stream-events
 	for p in $(ps -ef | grep "ssh localhost gerrit stream-event" | awk '{ print $2}'); do
-		kill -9 $p
+		kill -9 $p || true
 	done
 	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --chuid $USERNAME --name $NAME
-	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --chuid $USERNAME --name autosubmit 
+	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --chuid $USERNAME --name autosubmit
 	RETVAL="$?"
 	[ "$RETVAL" = 2 ] && return 2
 	# Wait for children to finish too if this is a daemon that forks
