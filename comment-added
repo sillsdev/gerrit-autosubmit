@@ -105,15 +105,6 @@ for line in $MSG; do
 done
 
 if [ -n "$TOADDCAT" ]; then
-	# Check if the parent project is *Crossplatform*
-	JSON=$(curl --noproxy localhost --silent --show-error http://localhost:$PORT/projects/$PROJECT | tail -n +2)
-	XPLAT=$($(dirname "$0")/getjson.py --readstring "parent" <<< $JSON)
-
-	if ! [[ $XPLAT =~ Crossplatform ]] ; then
-		log "Skipping; no crossplatform project"
-		exit 0
-	fi
-
 	ssh -l "hooks" -p 59418 localhost -i $GERRIT_SITE/etc/ssh_host_ecdsa_key \
 		suexec --as jenkins -- \
 		gerrit review $TOADDCAT --project $PROJECT --notify NONE \
