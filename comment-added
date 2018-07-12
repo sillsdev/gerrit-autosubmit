@@ -83,6 +83,10 @@ for line in $MSG; do
 			CATEGORY="Verified"
 			CATMSG="Verified"
 			;;
+		*)
+			CATEGORY="Verified"
+			CATMSG="Verified"
+			;;
 	esac
 	RESULT=$(echo $line | awk '{print $3}')
 	case $RESULT in
